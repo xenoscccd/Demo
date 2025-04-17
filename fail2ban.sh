@@ -21,32 +21,52 @@ NC='\033[0m'
 
 # 初始化包管理器
 init_pkg_manager() {
-    case "$OS_ID" in
-    centos | rhel | fedora | ol)
+    if command -v yum >/dev/null; then
         PKG_MANAGER="yum"
         INSTALL_CMD="yum install -y -q"
         UPDATE_CMD="yum update -y -q"
         SERVICE_SUFFIX=""
-        # 启用EPEL（CentOS/RHEL 7+）
-        if [[ "$OS_ID" =~ (centos|rhel) && ! -f /etc/yum.repos.d/epel.repo ]]; then
-            echo -e "${YELLOW}启用EPEL仓库...${NC}" | tee -a $LOGFILE
-            $INSTALL_CMD epel-release >>$LOGFILE 2>&1 || {
-                echo -e "${RED}默认EPEL仓库启用失败，使用第三方EPEL仓库...${NC}" | tee -a $LOGFILE
-                $INSTALL_CMD http://vault.epel.cloud//pub/epel/epel-release-latest-7.noarch.rpm >>$LOGFILE 2>&1
-            }
-        fi
-        ;;
-    debian | ubuntu)
+    elif command -v dnf >/dev/null; then
+        PKG_MANAGER="dnf"
+        INSTALL_CMD="dnf install -y -q"
+        UPDATE_CMD="dnf update -y -q"
+        SERVICE_SUFFIX=""
+    elif command -v apt-get >/dev/null; then
         PKG_MANAGER="apt"
         INSTALL_CMD="apt-get install -y -qq"
         UPDATE_CMD="apt-get update -y && apt-get upgrade -y -qq"
         SERVICE_SUFFIX=""
-        ;;
-    *)
-        echo -e "${RED}不支持的操作系统: $OS_ID${NC}" | tee -a $LOGFILE
+    else
+        echo -e "${RED}不支持的包管理器${NC}" | tee -a $LOGFILE
         exit 1
-        ;;
-    esac
+    fi
+
+    # case "$OS_ID" in
+    # centos | rhel | fedora | ol)
+    #     PKG_MANAGER="yum"
+    #     INSTALL_CMD="yum install -y -q"
+    #     UPDATE_CMD="yum update -y -q"
+    #     SERVICE_SUFFIX=""
+    #     # 启用EPEL（CentOS/RHEL 7+）
+    #     if [[ "$OS_ID" =~ (centos|rhel) && ! -f /etc/yum.repos.d/epel.repo ]]; then
+    #         echo -e "${YELLOW}启用EPEL仓库...${NC}" | tee -a $LOGFILE
+    #         $INSTALL_CMD epel-release >>$LOGFILE 2>&1 || {
+    #             echo -e "${RED}默认EPEL仓库启用失败，使用第三方EPEL仓库...${NC}" | tee -a $LOGFILE
+    #             $INSTALL_CMD http://vault.epel.cloud//pub/epel/epel-release-latest-7.noarch.rpm >>$LOGFILE 2>&1
+    #         }
+    #     fi
+    #     ;;
+    # debian | ubuntu)
+    #     PKG_MANAGER="apt"
+    #     INSTALL_CMD="apt-get install -y -qq"
+    #     UPDATE_CMD="apt-get update -y && apt-get upgrade -y -qq"
+    #     SERVICE_SUFFIX=""
+    #     ;;
+    # *)
+    #     echo -e "${RED}不支持的操作系统: $OS_ID${NC}" | tee -a $LOGFILE
+    #     exit 1
+    #     ;;
+    # esac
 }
 
 # 检查root权限
@@ -122,13 +142,11 @@ configure_ssh() {
     local sshd_config="/etc/ssh/sshd_config"
     cp "$sshd_config" "${sshd_config}.bak-$(date +%s)"
 
-
     echo -e "${YELLOW}[4/10] 配置SSH日志级别...${NC}" | tee -a $LOGFILE
-    if grep $sshd_config -q "^LogLevel"
-    then
+    if grep "^LogLevel" -q $sshd_config; then
         echo -e "${YELLOW}SSH日志级别已配置${NC}" | tee -a $LOGFILE
     else
-        echo "LogLevel INFO" >> "$sshd_config"
+        echo "LogLevel INFO" >>"$sshd_config"
     fi
 
     local ssh_service_name="sshd"
@@ -230,20 +248,44 @@ install_dependencies() {
 
 # 安装fail2ban
 install_fail2ban() {
+    echo -e "${YELLOW}[7/10] 检查当前是否已经安装fail2ban...${NC}" | tee -a $LOGFILE
+    if command -v fail2ban-client &>/dev/null; then
+        echo -e "${YELLOW}fail2ban已经安装${NC},跳过安装 执行添加恶意黑名单脚本" | tee -a $LOGFILE
+        block_malicious_ips
+        setup_cron_job
+        echo -e "${GREEN}\n安装完成！建议重启系统以确保所有配置生效${NC}" | tee -a $LOGFILE
+        echo -e "${YELLOW}详细日志请查看: $LOGFILE${NC}"
+        exit 0
+    fi
     echo -e "${YELLOW}[7/10] 正在安装fail2ban...${NC}" | tee -a $LOGFILE
-    [ -d "fail2ban" ] && rm -rf fail2ban
+    # 先通过系统包安装
+    if [[ "$PKG_MANAGER" =~ ^(yum|dnf|apt)$ ]]; then
+        ${INSTALL_CMD} fail2ban >>$LOGFILE 2>&1 || {
+            echo -e "${RED}通过系统源fail2ban安装失败${NC}" | tee -a $LOGFILE
+        }
+    else
+        # 检查git是否安装
+        if ! command -v git &>/dev/null; then
+            echo -e "${YELLOW}安装git...${NC}" | tee -a $LOGFILE
+            $INSTALL_CMD git >>$LOGFILE 2>&1 || {
+                echo -e "${RED}git安装失败，无法继续${NC}" | tee -a $LOGFILE
+                exit 1
+            }
+        fi
 
-    echo -e "${YELLOW}克隆仓库: $FAIL2BAN_REPO${NC}" | tee -a $LOGFILE
-    git clone "$FAIL2BAN_REPO" >>$LOGFILE 2>&1 || {
-        echo -e "${RED}仓库克隆失败${NC}" | tee -a $LOGFILE
-        exit 1
-    }
-
-    cd fail2ban && python3 setup.py install >>$LOGFILE 2>&1 || {
-        echo -e "${RED}fail2ban安装失败${NC}" | tee -a $LOGFILE
-        exit 1
-    }
-    cd ..
+        # 克隆仓库
+        echo -e "${YELLOW}克隆仓库: $FAIL2BAN_REPO${NC}" | tee -a $LOGFILE
+        git clone "$FAIL2BAN_REPO" >>$LOGFILE 2>&1 || {
+            echo -e "${RED}仓库克隆失败${NC}" | tee -a $LOGFILE
+            exit 1
+        }
+        cd fail2ban || exit 1
+        python3 setup.py install >>$LOGFILE 2>&1 && touch /etc/fail2ban/py.installed || {
+            echo -e "${RED}fail2ban安装失败${NC}" | tee -a $LOGFILE
+            exit 1
+        }
+        cd ..
+    fi
 }
 
 # 配置fail2ban
@@ -255,7 +297,33 @@ configure_fail2ban() {
     fi
     # 初始化配置文件
     if [ ! -f /etc/fail2ban/jail.local ]; then
-        cat >/etc/fail2ban/jail.local <<EOF
+        echo -e "${YELLOW}初始化配置文件...${NC}" | tee -a $LOGFILE
+        if [[ "$PKG_MANAGER" =~ ^(yum|dnf|apt)$ ]]; then
+            cat >/etc/fail2ban/jail.local <<EOF
+[DEFAULT]
+# 配置忽略检测的 IP (段），添加多个需要用空格隔开
+ignoreip = 127.0.0.1/8
+[sshd]
+enabled = true
+# ssh的端口
+port = ${port}
+# 配置使用的匹配规则文件（位于 /etc/fail2ban/filter.d 目录中）
+filter = sshd    
+# 日志文件路径
+logpath = /var/log/secure
+# 配置 IP 封禁的持续时间（years/months/weeks/days/hours/minutes/seconds）
+bantime  = 7d
+# 是否开启增量禁止，可选
+bantime.increment = true
+# 如果上面为false则不生效，增量禁止的指数因子，这里设置为168的意思就是每次增加 168*(2^ban次数) (封禁时长类似这样 - 1小时 -> 7天 -> 14天 ...):
+bantime.factor = 168
+# 配置 IP 封禁的持续时间（years/months/weeks/days/hours/minutes/seconds）
+maxretry = 3
+# 配置使用的匹配规则文件（位于 /etc/fail2ban/filter.d 目录中）
+action = iptables
+EOF
+        else
+            cat >/etc/fail2ban/jail.local <<EOF
 [DEFAULT]
 # 配置忽略检测的 IP (段)，添加多个需要用空格隔开
 ignoreip = 127.0.0.1/8
@@ -280,31 +348,43 @@ findtime  = 5m
 # 配置在 findtime 时间内发生多少次失败登录然后将 IP 封禁
 maxretry = 3
 # 配置封禁 IP 的手段（位于 /etc/fail2ban/action.d 目录中），可通过 iptables、firewalld 或者 TCP Wrapper 等，此处设置为 hostsdeny 代表使用 TCP Wrapper
-action = hostsdeny
+action = iptables
 EOF
+        fi
     else
         echo "jail.local already exists, skipping creation." | tee -a $LOGFILE
     fi
 
     # 服务管理
-    if [ "$PKG_MANAGER" = "apt" ]; then
-        if [ -d "fail2ban" ]; then
-            cp fail2ban/files/debian-initd /etc/init.d/fail2ban
-            cp fail2ban/build/fail2ban.service /usr/lib/systemd/system/fail2ban.service
-            update-rc.d fail2ban defaults
-            service fail2ban start >>$LOGFILE 2>&1
-            systemctl enable fail2ban >>$LOGFILE 2>&1
+    if [ -f /etc/fail2ban/py.installed ]; then
+        if [ "$PKG_MANAGER" = "apt" ]; then
+            if [ -d "fail2ban" ]; then
+                cp fail2ban/files/debian-initd /etc/init.d/fail2ban
+                cp fail2ban/build/fail2ban.service /usr/lib/systemd/system/fail2ban.service
+                update-rc.d fail2ban defaults
+                service fail2ban start >>$LOGFILE 2>&1
+                systemctl enable fail2ban >>$LOGFILE 2>&1
+            else
+                echo "fail2ban directory not found. Please check your script's location or download the necessary files." | tee -a $LOGFILE
+            fi
         else
-            echo "fail2ban directory not found. Please check your script's location or download the necessary files." | tee -a $LOGFILE
+            if [ -d "/usr/lib/systemd/system/" ]; then
+                cp files/redhat-systemd/* /usr/lib/systemd/system/
+                systemctl daemon-reload
+                systemctl enable fail2ban${SERVICE_SUFFIX} >>$LOGFILE 2>&1
+                systemctl start fail2ban${SERVICE_SUFFIX} >>$LOGFILE 2>&1
+            else
+                echo "/usr/lib/systemd/system/ directory not found. Please check your system configuration." | tee -a $LOGFILE
+            fi
         fi
     else
-        if [ -d "/usr/lib/systemd/system/" ]; then
-            cp files/redhat-systemd/* /usr/lib/systemd/system/
-            systemctl daemon-reload
-            systemctl enable fail2ban${SERVICE_SUFFIX} >>$LOGFILE 2>&1
-            systemctl start fail2ban${SERVICE_SUFFIX} >>$LOGFILE 2>&1
+        if [ "$PKG_MANAGER" = "apt" ]; then
+            update-rc.d fail2ban defaults
+            service fail2ban start >>$LOGFILE 2>&1
         else
-            echo "/usr/lib/systemd/system/ directory not found. Please check your system configuration." | tee -a $LOGFILE
+            chkconfig --add fail2ban
+            chkconfig fail2ban on
+            service fail2ban start >>$LOGFILE 2>&1
         fi
     fi
 }
@@ -318,8 +398,12 @@ block_malicious_ips() {
 
     # 下载并处理IP列表
     echo -e "${YELLOW}下载IP列表: $IPSUM_URL${NC}" | tee -a $LOGFILE
-    curl --compressed -s "$IPSUM_URL" |
-        awk '!/#/ && $2 >=3 {print $1}' |
+    curl --compressed -s "$IPSUM_URL" >/tmp/ipsum.txt || {
+        echo -e "${RED}恶意IP列表下载失败${NC}" | tee -a $LOGFILE
+        return 1
+    }
+
+    cat /tmp/ipsum.txt | awk '!/#/ && $2 >=3 {print $1}' |
         while read -r ip; do
             ipset add ipsum "$ip" 2>/dev/null
         done
