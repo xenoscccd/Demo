@@ -98,15 +98,15 @@ setup_firewall() {
         fi
         ufw status verbose
 
-        # 为ipset规则持久性安装iptables-persistent
-        if ! dpkg -l | grep -q iptables-persistent; then
-            echo -e "${YELLOW}为 ipset 规则持久性安装 iptables-persistent...${NC}"
-            export DEBIAN_FRONTEND=noninteractive
-            $INSTALL_CMD iptables-persistent || {
-                echo -e "${RED}iptables-persistent 安装失败${NC}"
-                # 不退出，因为fail2ban可能仍能运行
-            }
-        fi
+        # # 为ipset规则持久性安装iptables-persistent
+        # if ! dpkg -l | grep -q iptables-persistent; then
+        #     echo -e "${YELLOW}为 ipset 规则持久性安装 iptables-persistent...${NC}"
+        #     export DEBIAN_FRONTEND=noninteractive
+        #     $INSTALL_CMD iptables-persistent || {
+        #         echo -e "${RED}iptables-persistent 安装失败${NC}"
+        #         # 不退出，因为fail2ban可能仍能运行
+        #     }
+        # fi
 
     else
         # 设置 iptables (现有逻辑)
@@ -127,16 +127,6 @@ setup_firewall() {
                 }
                 systemctl enable iptables
                 systemctl start iptables
-            fi
-        elif [ "$PKG_MANAGER" = "apt" ]; then
-            # 这部分适用于Debian上的iptables，如果UFW未被选择/可用
-            if ! dpkg -l | grep -q iptables-persistent; then
-                echo -e "${YELLOW}正在安装 iptables-persistent...${NC}"
-                export DEBIAN_FRONTEND=noninteractive
-                $INSTALL_CMD iptables-persistent || {
-                    echo -e "${RED}iptables-persistent 安装失败${NC}"
-                    exit 1
-                }
             fi
         fi
     fi
