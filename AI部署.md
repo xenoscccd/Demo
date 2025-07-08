@@ -181,7 +181,7 @@ reboot
 npu-smi info
 ```
 
-![img](https://www.hiascend.com/doc_center/source/zh/CANNCommunityEdition/82RC1alpha001/softwareinst/instg/figure/zh-cn_image_0000002290881133.png)
+![img]([npustat](https://github.com/xenoscccd/Demo/blob/main/png/npustat.png))
 
 ##### 5、安装CANN
 
