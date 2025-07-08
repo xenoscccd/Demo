@@ -181,7 +181,7 @@ reboot
 npu-smi info
 ```
 
-![img]([npustat](https://github.com/xenoscccd/Demo/raw/main/png/npustat.png))
+![img](https://raw.githubusercontent.com/xenoscccd/Demo/main/png/npustat.png)
 
 ##### 5、安装CANN
 
@@ -478,11 +478,11 @@ vim /usr/local/Ascend/mindie/latest/mindie-service/conf/config.json
 
 首先附上[Mindie server参数](https://www.hiascend.com/document/detail/zh/mindie/100/mindieservice/servicedev/mindie_service0285.html)
 
-![img](https://www.hikunpeng.com/doc_center/source/zh/kunpengrag/bestpractice/figure/zh-cn_image_0000002362016561.png)
+![img](https://raw.githubusercontent.com/xenoscccd/Demo/main/png/Snipaste_2025-07-08_16-32-38.png)
 
 **注意：300I-DUO这张卡当前只能使用4卡并行处理，所以这里应该是0,1,2,3,4,5,6,7。图片引用第三方，请以实际为准。**
 
-![img](https://i-blog.csdnimg.cn/img_convert/2aac3cdb53041a712d753b79a280231c.png)
+![img](https://raw.githubusercontent.com/xenoscccd/Demo/main/png/Snipaste_2025-07-08_16-33-41.png)
 
 ###### 2.3 启动模型
 
@@ -534,6 +534,15 @@ curl -H "Accept: application/json" -H "Content-type: application/json" \
 返回结果例：
 
 ```shell
-{"id":"endpoint_common_642","object":"chat.completion","created":1751962541,"model":"ds-r1-32b","choices":[{"index":0,"message":{"role":"assistant","content":"您好！我是由中国的深度求索（DeepSeek）公司开发的智能助手DeepSeek-R","tool_calls":null},"finish_reason":"length"}],"usage":{"prompt_tokens":8,"completion_tokens":20,"total_tokens":28},"prefill_time":130,"decode_time_arr":[80,79,77,86,78,81,78,78,77,79,84,80,78,79,75,79,80,79,81]}
+{"id":"endpoint_common_642",
+"object":"chat.completion",
+"created":1751962541,
+"model":"ds-r1-32b",
+"choices":[{"index":0,"message":{"role":"assistant",
+"content":"您好！我是由中国的深度求索（DeepSeek）公司开发的智能助手DeepSeek-R",
+"tool_calls":null},
+"finish_reason":"length"}],
+"usage":{"prompt_tokens":8,
+"completion_tokens":20,"total_tokens":28},"prefill_time":130,"decode_time_arr":[80,79,77,86,78,81,78,78,77,79,84,80,78,79,75,79,80,79,81]}
 ```
 
