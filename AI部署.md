@@ -181,7 +181,7 @@ reboot
 npu-smi info
 ```
 
-![img]([npustat](https://github.com/xenoscccd/Demo/blob/main/png/npustat.png))
+![img]([npustat](https://github.com/xenoscccd/Demo/raw/main/png/npustat.png))
 
 ##### 5、安装CANN
 
